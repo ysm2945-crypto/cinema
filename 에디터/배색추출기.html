@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>장면 배색 추출기 v2</title>
+<style>
+@font-face{font-family:"INT";src:url("fonts/Inter-400.woff2") format("woff2");font-weight:400;font-display:block}
+@font-face{font-family:"INT";src:url("fonts/Inter-500.woff2") format("woff2");font-weight:500;font-display:block}
+@font-face{font-family:"INT";src:url("fonts/Inter-700.woff2") format("woff2");font-weight:700;font-display:block}
+@font-face{font-family:"PTD";src:url("fonts/PretendardVariable.woff2") format("woff2-variations"),url("fonts/PretendardVariable.woff2") format("woff2");font-weight:45 930;font-display:block}
+/* 11주 디자인 시스템 — A24(a24films.com) 실측: 바탕 #FCFBFA · 글자 #0E0E0D · 회색 #9C9791 / #B2ADA6 · Neue Montreal → Inter · Mono → JetBrains Mono */
+:root{--bg:#fcfbfa;--ink:#0e0e0d;--n50:#f2f0ed;--n100:#e8e6e2;--n200:#d6d4d1;--n300:#c7c3bd;--mute:#9c9791;--sans:"INT","PTD",system-ui,sans-serif;--mono:"INT","PTD",system-ui,sans-serif;color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.45 var(--sans);display:grid;grid-template-columns:minmax(0,1fr) 380px;height:100vh;overflow:hidden;word-break:keep-all}
+.stage{display:flex;align-items:center;justify-content:center;padding:28px;min-width:0;min-height:0;border-right:1px solid var(--n100);position:relative}
+.stage canvas{max-width:100%;max-height:100%;aspect-ratio:4/5;height:calc(100vh - 56px);width:auto;box-shadow:0 30px 60px -40px rgba(14,14,13,.45);background:#fff}
+.drop{position:absolute;inset:28px;border:1px dashed var(--mute);display:none;align-items:center;justify-content:center;font:400 12px var(--mono);text-transform:uppercase;background:rgba(252,251,250,.86)}
+.stage.over .drop{display:flex}
+aside{overflow:auto;padding:22px 22px 40px}
+h1{font:500 28px/1 var(--sans);letter-spacing:-.02em;margin:0 0 4px}
+.sub{font:400 10px/1.3 var(--mono);text-transform:uppercase;color:var(--mute);margin-bottom:22px}
+.blk{border-top:1px solid var(--n100);padding:14px 0}
+.lab{display:block;font:400 10px/1.2 var(--mono);text-transform:uppercase;letter-spacing:.02em;margin-bottom:8px}
+input[type=text],select{width:100%;font:400 15px var(--sans);padding:9px 10px;border:1px solid var(--n200);background:#fff;border-radius:0;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--ink)}
+.row{display:flex;gap:8px;align-items:center}
+.row > *{flex:1}
+button{font:400 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.02em;padding:11px 12px;border:1px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer;border-radius:0}
+button:hover{background:var(--ink);color:#fff}
+button.main{background:var(--ink);color:#fff}
+button.main:hover{background:#333}
+.sw{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}
+.sw div{aspect-ratio:1;border:1px solid rgba(0,0,0,.06)}
+.sw small{display:block;font:400 9px var(--mono);margin-top:3px}
+#tsw .tr{margin-top:10px}#tsw .tr b{display:block;font:400 9px var(--mono);text-transform:uppercase;margin-bottom:3px}#tsw .tr div{display:flex;height:16px}#tsw .tr i{flex:1}
+.note{font-size:12px;color:var(--mute);margin-top:8px}
+#msg{font:400 11px var(--mono);color:#27bb0d;min-height:16px;margin-top:10px}
+@media (max-width:860px){body{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto;overflow:auto}.stage{border:0}.stage canvas{height:auto;width:100%}}
+</style>
+</head>
+<body>
+<div class="stage" id="stage"><canvas id="cv" width="1080" height="1350"></canvas><div class="drop">장면 사진을 여기에 놓으세요</div></div>
+<aside>
+  <h1>장면 배색 추출 v2</h1>
+  <div class="sub">LIGHT · MEDIUM · DARK · GENERAL SPECTRUM + 포인트 컬러</div>
+
+  <div class="blk"><span class="lab">01 · 장면 사진</span>
+    <div class="row"><button class="main" id="pick">사진 열기</button></div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <p class="note">영화를 멈춘 화면을 캡처해 열거나, 판 위로 끌어다 놓습니다.</p></div>
+
+  <div class="blk"><span class="lab">02 · 번호 · 영화</span>
+    <div class="row"><select id="no"><option>01</option><option>02</option><option>03</option><option>04</option><option>05</option></select></div>
+    <div style="height:8px"></div><input type="text" id="title" placeholder="영화 제목">
+    <div style="height:8px"></div><input type="text" id="meta" placeholder="감독 · 연도"></div>
+
+  <div class="blk"><span class="lab">03 · 사진 자리 (위 ↔ 아래)</span><input type="range" id="fy" min="0" max="100" value="50"></div>
+
+  <div class="blk"><span class="lab">04 · 색 개수</span>
+    <div class="row"><label>main <select id="nm"><option>3</option><option>4</option><option selected>5</option><option>6</option></select></label>
+    <label>accent <select id="na"><option>0</option><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label></div>
+    <div style="height:10px"></div><button id="again">다시 계산</button>
+    <div class="sw" id="sw"></div>
+    <div id="tsw"></div>
+    <p class="note">LIGHT·MEDIUM·DARK는 밝기를 3등분해 구간마다 7색, GENERAL SPECTRUM은 화면 전체에서 20색을 뽑습니다. 포인트는 main·accent 중 작지만 눈에 띄는 색입니다.</p></div>
+
+  <div class="blk"><div class="row"><button class="main" id="save">PNG 저장</button><button id="copy">배색표 복사</button></div>
+  <div id="msg"></div>
+  <p class="note">PNG는 다운로드 폴더에 <b>배색_1080x1350_</b>으로 시작하는 이름으로 저장됩니다. 배색표는 Claude Code 입력창에 붙여 넣으세요.</p></div>
+</aside>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const cv = $('cv'), cx = cv.getContext('2d');
+const W = 1080, H = 1350, M = 72;
+let img = null, pal = {main: [], accent: [], total: 0, tone: null};
+
+/*CORE*/
+const s2l = c => { c /= 255; return c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4); };
+function lab(r, g, b){
+  r = s2l(r); g = s2l(g); b = s2l(b);
+  let x = (r * .4124 + g * .3576 + b * .1805) / .95047, y = r * .2126 + g * .7152 + b * .0722, z = (r * .0193 + g * .1192 + b * .9505) / 1.08883;
+  const f = t => t > .008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+  x = f(x); y = f(y); z = f(z); return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+const dE = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const hex = c => '#' + c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+let seed = 7;
+function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+function kmeans(P, k, it = 14){
+  k = Math.min(k, P.length);
+  const C = [P[Math.floor(rnd() * P.length)].lab.slice()];
+  const D = P.map(p => dE(p.lab, C[0]) ** 2);
+  while (C.length < k) { // k-means++ (최소 거리 배열을 누적 갱신)
+    const s = D.reduce((a, b) => a + b, 0); let r = rnd() * s, i = 0;
+    while (r > D[i] && i < D.length - 1) { r -= D[i]; i++; }
+    const c = P[i].lab.slice(); C.push(c); P.forEach((p, j) => { const d = dE(p.lab, c) ** 2; if (d < D[j]) D[j] = d; });
+  }
+  let A = new Array(P.length).fill(0);
+  for (let n = 0; n < it; n++) {
+    P.forEach((p, i) => { let b = 0, bd = 1e9; C.forEach((c, j) => { const d = dE(p.lab, c); if (d < bd) { bd = d; b = j; } }); A[i] = b; });
+    const S = C.map(() => [0, 0, 0, 0]); P.forEach((p, i) => { const s = S[A[i]]; s[0] += p.lab[0]; s[1] += p.lab[1]; s[2] += p.lab[2]; s[3]++; });
+    S.forEach((s, j) => { if (s[3]) C[j] = [s[0] / s[3], s[1] / s[3], s[2] / s[3]]; });
+  }
+  const out = C.map(() => ({n: 0, r: 0, g: 0, b: 0})); P.forEach((p, i) => { const o = out[A[i]]; o.n++; o.r += p.rgb[0]; o.g += p.rgb[1]; o.b += p.rgb[2]; });
+  return out.filter(o => o.n).map(o => { const rgb = [o.r / o.n, o.g / o.n, o.b / o.n]; return {rgb, lab: lab(...rgb), n: o.n}; });
+}
+function mergeClose(list, th){
+  list = list.slice().sort((a, b) => b.n - a.n);
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (dE(list[i].lab, list[j].lab) < th) {
+    const a = list[i], b = list[j], n = a.n + b.n; a.rgb = a.rgb.map((v, k) => (v * a.n + b.rgb[k] * b.n) / n); a.lab = lab(...a.rgb); a.n = n; list.splice(j, 1); j--; }
+  return list;
+}
+// 밝기를 3등분(어두운 · 중간 · 밝은 픽셀 수가 같게) → 구간마다 7색, 전체에서 20색
+function tones(P){
+  const N = P.length, S = P.slice().sort((a, b) => a.lab[0] - b.lab[0]), t1 = Math.floor(N / 3), t2 = Math.floor(2 * N / 3);
+  const G = {dark: S.slice(0, t1), medium: S.slice(t1, t2), light: S.slice(t2)}, out = {};
+  for (const key of ['light', 'medium', 'dark']) {
+    const c = mergeClose(kmeans(G[key], 9, 12), 3).slice(0, 7).sort((a, b) => a.lab[0] - b.lab[0]);
+    out[key] = c.map(x => ({hex: hex(x.rgb), p: x.n / N}));
+  }
+  const sp = mergeClose(kmeans(P, 24, 12), 4).slice(0, 20).sort((a, b) => b.lab[0] - a.lab[0]);
+  out.spectrum = sp.map(x => ({hex: hex(x.rgb), p: x.n / N}));
+  return out;
+}
+/*END*/
+
+function pixels(){
+  const w = 180, h = Math.round(w * img.height / img.width);
+  const t = document.createElement('canvas'); t.width = w; t.height = h; const c = t.getContext('2d');
+  c.drawImage(img, 0, 0, w, h); const d = c.getImageData(0, 0, w, h).data; const P = [];
+  for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 128) continue; const rgb = [d[i], d[i + 1], d[i + 2]]; P.push({rgb, lab: lab(...rgb)}); }
+  return P;
+}
+function extract(){
+  if (!img) return; const P = pixels(); const N = P.length; const nm = +$('nm').value, na = +$('na').value;
+  let main = kmeans(P, nm + 2).sort((a, b) => b.n - a.n);
+  // 가까운 색 합치기
+  for (let i = 0; i < main.length; i++) for (let j = i + 1; j < main.length; j++) if (dE(main[i].lab, main[j].lab) < 9) {
+    const a = main[i], b = main[j], n = a.n + b.n; a.rgb = a.rgb.map((v, k) => (v * a.n + b.rgb[k] * b.n) / n); a.lab = lab(...a.rgb); a.n = n; main.splice(j, 1); j--; }
+  main = main.sort((a, b) => b.n - a.n).slice(0, nm);
+  const fine = kmeans(P, 22, 10); const acc = [];
+  fine.map(c => ({...c, C: Math.hypot(c.lab[1], c.lab[2]), share: c.n / N}))
+    .filter(c => c.C > 22 && c.share < .05 && Math.min(...main.map(m => dE(m.lab, c.lab))) > 18)
+    .sort((a, b) => b.C * Math.pow(b.share, .3) - a.C * Math.pow(a.share, .3))
+    .forEach(c => { if (acc.length < na && acc.every(a => dE(a.lab, c.lab) > 16)) acc.push(c); });
+  pal = {main: main.map(c => ({hex: hex(c.rgb), p: c.n / N})), accent: acc.map(c => ({hex: hex(c.rgb), p: c.n / N})), total: N, tone: tones(P)};
+  draw();
+}
+
+// 카드 그리기
+function fit(text, font, max){ cx.font = font; return cx.measureText(text).width <= max; }
+function wrap(text, font, max){ cx.font = font; const out = []; for (const para of String(text).split('\n')) { let line = ''; for (const w of para.split(/(\s+)/)) { const t = line + w; if (cx.measureText(t).width > max && line.trim()) { out.push(line.trim()); line = w.trimStart(); } else line = t; } if (line.trim()) out.push(line.trim()); } return out; }
+const pct = (p, d) => (p * 100).toFixed(d) + '%';
+function bandRow(label, arr, x, y, w, h, hexLabels){
+  cx.fillStyle = '#0e0e0d'; cx.font = '400 17px INT, PTD'; cx.fillText(label, x, y);
+  const n = arr.length; if (!n) { cx.fillStyle = '#e8e6e2'; cx.fillRect(x, y + 14, w, h); return; }
+  const cw = w / n;
+  arr.forEach((c, i) => { cx.fillStyle = c.hex; cx.fillRect(Math.round(x + i * cw), y + 14, Math.ceil(cw), h); });
+}
+function draw(){
+  cx.fillStyle = '#fcfbfa'; cx.fillRect(0, 0, W, H); cx.textBaseline = 'alphabetic';
+  cx.fillStyle = '#0e0e0d'; cx.font = '400 20px INT, PTD'; cx.fillText('SCENE PALETTE', M, 80);
+  cx.textAlign = 'right'; cx.fillText($('no').value + ' / 05', W - M, 80); cx.textAlign = 'left';
+  const ix = M, iy = 106, iw = W - M * 2, ih = Math.round(iw * 9 / 16);
+  if (img) { const r = Math.max(iw / img.width, ih / img.height), sw = iw / r, sh = ih / r; const sx = (img.width - sw) / 2, sy = (img.height - sh) * (+$('fy').value / 100); cx.drawImage(img, sx, sy, sw, sh, ix, iy, iw, ih); }
+  else { cx.fillStyle = '#e8e6e2'; cx.fillRect(ix, iy, iw, ih); cx.fillStyle = '#9c9791'; cx.font = '400 22px INT, PTD'; cx.textAlign = 'center'; cx.fillText('장면 사진을 여세요', W / 2, iy + ih / 2); cx.textAlign = 'left'; }
+  // 영화 정보 — 제목 크게, 오른쪽에 연도
+  const meta = ($('meta').value || '').trim(); const yr = (meta.match(/(19|20)\d\d/) || [''])[0]; const rest = meta.replace(yr, '').replace(/^[\s·,]+|[\s·,]+$/g, '');
+  let y = iy + ih + 78; const tf = s => `500 ${s}px INT, PTD`; let ts = 68; const title = $('title').value || '영화 제목';
+  const tw = iw - (yr ? 170 : 0);
+  while (ts > 40 && wrap(title, tf(ts), tw).length > 2) ts -= 4;
+  cx.fillStyle = '#0e0e0d'; const tl = wrap(title, tf(ts), tw).slice(0, 2); cx.font = tf(ts); cx.letterSpacing = '-1px';
+  tl.forEach((l, i) => cx.fillText(l, ix, y + i * ts * 1.02)); cx.letterSpacing = '0px';
+  if (yr) { cx.textAlign = 'right'; cx.font = '500 52px INT'; cx.letterSpacing = '-1px'; cx.fillText(yr, ix + iw, y); cx.letterSpacing = '0px'; cx.textAlign = 'left'; }
+  y += (tl.length - 1) * ts * 1.02 + 36; cx.fillStyle = '#9c9791'; cx.font = '400 20px INT, PTD'; cx.fillText((rest || (meta ? '' : '감독 · 연도')).toUpperCase(), ix, y);
+  const T = pal.tone || {light: [], medium: [], dark: [], spectrum: []};
+  // LIGHT · MEDIUM · DARK
+  y += 54; const gap = 34, cw3 = (iw - gap * 2) / 3;
+  bandRow('LIGHT', T.light, ix, y, cw3, 76); bandRow('MEDIUM', T.medium, ix + cw3 + gap, y, cw3, 76); bandRow('DARK', T.dark, ix + (cw3 + gap) * 2, y, cw3, 76);
+  // GENERAL SPECTRUM
+  y += 76 + 14 + 58; bandRow('GENERAL SPECTRUM', T.spectrum, ix, y, iw, 92);
+  // POINT — 작지만 눈에 띄는 색
+  y += 92 + 14 + 54; cx.fillStyle = '#0e0e0d'; cx.font = '400 17px INT, PTD'; cx.fillText('POINT COLOR · 작지만 눈에 띄는 색', ix, y);
+  const ay = y + 14, aw = 150, ah = 56;
+  if (!pal.accent.length) { cx.fillStyle = '#9c9791'; cx.font = '400 17px INT, PTD'; cx.fillText(img ? '눈에 띄는 작은 색이 없는 장면입니다' : '—', ix, ay + 34); }
+  pal.accent.slice(0, 5).forEach((a, i) => { const x = ix + i * (aw + 46); cx.fillStyle = a.hex; rr(x, ay, aw, ah, 0); cx.fill(); cx.fillStyle = '#0e0e0d'; cx.font = '500 19px INT'; cx.fillText(a.hex, x, ay + ah + 26); cx.fillStyle = '#9c9791'; cx.font = '400 15px INT'; cx.fillText(pct(a.p, 1), x + 96, ay + ah + 26); });
+  // 오른쪽 사이드 스와치
+  $('sw').innerHTML = pal.main.concat(pal.accent).map(c => `<div style="background:${c.hex}"></div>`).join('');
+  $('tsw').innerHTML = pal.tone ? [['light', 'Light'], ['medium', 'Medium'], ['dark', 'Dark'], ['spectrum', 'General spectrum']].map(([k, n]) => `<div class="tr"><b>${n}</b><div>${pal.tone[k].map(c => `<i style="background:${c.hex}"></i>`).join('')}</div></div>`).join('') : '';
+}
+function rr(x, y, w, h, r){ cx.beginPath(); cx.moveTo(x + r, y); cx.arcTo(x + w, y, x + w, y + h, r); cx.arcTo(x + w, y + h, x, y + h, r); cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath(); }
+
+// 열기
+function open(src){ return new Promise(res => { const im = new Image(); im.onload = () => { img = im; seed = 7; extract(); res(true); }; im.onerror = () => { msg('사진을 열 수 없습니다', true); res(false); }; im.src = src; }); }
+$('pick').onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; if (f) open(URL.createObjectURL(f)); };
+const st = $('stage');
+st.addEventListener('dragover', e => { e.preventDefault(); st.classList.add('over'); });
+st.addEventListener('dragleave', () => st.classList.remove('over'));
+st.addEventListener('drop', e => { e.preventDefault(); st.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) open(URL.createObjectURL(f)); });
+['title', 'meta', 'no', 'fy'].forEach(id => $(id).addEventListener('input', draw));
+['nm', 'na'].forEach(id => $(id).addEventListener('change', extract));
+$('again').onclick = () => { seed = Math.floor(Math.random() * 1e6) + 1; extract(); };
+
+// 저장 · 복사
+const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
+$('save').onclick = () => cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `배색_1080x1350_${stamp()}.png`; document.body.appendChild(a); a.click(); a.remove(); msg('PNG 저장됨 — 다운로드 폴더를 확인하세요'); }, 'image/png');
+function table(){
+  return ['#### 배색표', `- 번호: ${$('no').value}`, `- 영화: ${$('title').value || '미정'}`, `- 감독 · 연도: ${$('meta').value || '미정'}`,
+    `- MAIN: ${pal.main.map(m => m.hex + ' ' + pct(m.p, 0)).join(' · ') || '없음'}`, `- ACCENT: ${pal.accent.map(a => a.hex + ' ' + pct(a.p, 1)).join(' · ') || '없음'}`, ...(pal.tone ? ['light', 'medium', 'dark', 'spectrum'].map(k => `- ${k.toUpperCase()}: ${pal.tone[k].map(c => c.hex).join(' ')}`) : []), `- 사진 자리: ${$('fy').value}`].join('\n');
+}
+$('copy').onclick = async () => { const t = table(); try { await navigator.clipboard.writeText(t); msg('배색표를 복사했습니다 — 입력창에 붙여 넣으세요'); } catch (e) { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); msg('배색표를 복사했습니다 — 입력창에 붙여 넣으세요'); } };
+function msg(t, bad){ $('msg').textContent = t; $('msg').style.color = bad ? '#f95936' : '#27bb0d'; clearTimeout(msg.t); msg.t = setTimeout(() => $('msg').textContent = '', 4000); }
+
+Promise.all(['400 20px INT', '500 20px INT', '700 20px INT', '500 20px PTD', '400 20px PTD'].map(f => document.fonts.load(f, '가A'))).then(() => { draw(); window.__fontsLoaded = true; });
+window.__pal = {tones, kmeans, lab, setSeed: v => { seed = v; }, open, extract, draw, table, get pal(){ return pal; }, set: (k, v) => { $(k).value = v; draw(); }, png: () => cv.toDataURL('image/png')};
+})();
+</script>
+</body>
+</html>
